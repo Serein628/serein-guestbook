@@ -611,14 +611,24 @@
   body.show-guestbook #page-works   { display: none; }
   body.show-guestbook #page-guestbook { display: block; }
 
-  /* ── Page transition (Barba-style blur+scale crossfade) ── */
+  /* ── Page slide transition (directional screen-switch) ── */
   body.transitioning { overflow: hidden; }
-  .page-transitioning {
-    transition: opacity 0.5s cubic-bezier(0.77,0,0.175,1),
-                transform 0.5s cubic-bezier(0.77,0,0.175,1),
-                filter 0.5s cubic-bezier(0.77,0,0.175,1) !important;
+  .page-slide {
+    transition: transform 0.6s cubic-bezier(0.32, 0, 0.07, 1),
+                opacity 0.45s cubic-bezier(0.32, 0, 0.07, 1),
+                filter 0.45s cubic-bezier(0.32, 0, 0.07, 1) !important;
+    will-change: transform, opacity;
   }
-  /* The actual opacity/transform/filter values are set via inline styles by JS */
+  /* Transition shadow overlay — adds depth during slide */
+  .slide-shadow-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 3;
+    background: transparent;
+    transition: background 0.5s ease;
+  }
+  body.transitioning .slide-shadow-overlay {
+    background: rgba(0,0,0,0.03);
+  }
 
   /* ── ARTICLE DETAIL STYLES (scoped inside #page-article) ── */
   #page-article {
@@ -3357,7 +3367,7 @@
     .contact-btn { font-size: 10px !important; padding: 6px 10px !important; }
 
     /* Page transitions */
-    .page-transitioning { transition-duration: 0.35s !important; }
+    .page-slide { transition-duration: 0.4s !important; }
   }
 
   /* ── Existing queries kept ──────────────────── */
@@ -5111,7 +5121,7 @@
     <div class="auth-guest-divider">或</div>
     <button class="auth-guest-btn" id="authGuestBtn" type="button">👋 游客登录 · 免注册体验</button>
 
-    <p class="auth-hint">数据保存在你的浏览器（localStorage），不会上传服务器</p>
+    <p class="auth-hint">留言同步到云端 · 所有人都能看到</p>
   </div>
 </div>
 
@@ -5235,8 +5245,11 @@
     if (navEl) navEl.classList.add('active');
   }
 
-  // ── Page transition (Barba-style blur+scale crossfade) ──
+  // ── Page slide transition (directional screen-switch) ──
   let isTransitioning = false;
+
+  // Page order for direction detection (left → right in nav)
+  var PAGE_ORDER = { 'page-home': 0, 'page-blog': 1, 'page-works': 2, 'page-guestbook': 3 };
 
   function getCurrentVisiblePage() {
     if (document.body.classList.contains('show-blog')) {
@@ -5249,15 +5262,25 @@
     return document.getElementById('page-home');
   }
 
-  function pageTransition(targetFn) {
+  // Create persistent shadow overlay for depth during transitions
+  var slideShadow = document.createElement('div');
+  slideShadow.className = 'slide-shadow-overlay';
+  document.body.appendChild(slideShadow);
+
+  function pageTransition(targetFn, targetPageId) {
     if (isTransitioning) return;
 
     var oldPage = getCurrentVisiblePage();
-    if (!oldPage) { targetFn(); return; }
+    if (!oldPage || oldPage.id === targetPageId) { targetFn(); return; }
 
     isTransitioning = true;
     document.body.classList.add('transitioning');
     var savedScroll = window.scrollY;
+
+    // Determine slide direction
+    var oldIdx = PAGE_ORDER[oldPage.id] != null ? PAGE_ORDER[oldPage.id] : 0;
+    var newIdx = PAGE_ORDER[targetPageId] != null ? PAGE_ORDER[targetPageId] : 0;
+    var goingForward = newIdx > oldIdx; // rightward nav → slide left
 
     // ── Pin old page at current viewport position ──
     oldPage.style.position = 'fixed';
@@ -5266,17 +5289,17 @@
     oldPage.style.width  = '100%';
     oldPage.style.zIndex = '1';
 
-    // ── LEAVING: fade → 0, scale → 0.92, blur → 20px ──
-    oldPage.classList.add('page-transitioning');
-    oldPage.style.opacity   = '0';
-    oldPage.style.transform = 'scale(0.92)';
-    oldPage.style.filter    = 'blur(20px)';
+    // ── LEAVING: slide out + fade + slight blur ──
+    oldPage.classList.add('page-slide');
+    var oldExitX = goingForward ? '-35%' : '35%';
+    oldPage.style.transform = 'translateX(' + oldExitX + ') scale(0.94)';
+    oldPage.style.opacity   = '0.15';
+    oldPage.style.filter    = 'blur(8px)';
 
-    // ── Handle completion of both phases ──
     function finishLeave() {
       // Restore old page
       oldPage.style.transition = 'none';
-      oldPage.classList.remove('page-transitioning');
+      oldPage.classList.remove('page-slide');
       oldPage.style.position  = '';
       oldPage.style.top       = '';
       oldPage.style.left      = '';
@@ -5290,7 +5313,7 @@
       // Switch page underneath
       targetFn();
 
-      var newPage = getCurrentVisiblePage();
+      var newPage = document.getElementById(targetPageId);
       if (!newPage) {
         document.body.classList.remove('transitioning');
         isTransitioning = false;
@@ -5304,26 +5327,26 @@
       newPage.style.width  = '100%';
       newPage.style.zIndex = '2';
 
-      // ── ENTERING: start blurred & scaled up (no transition) ──
+      // ── ENTERING: start off-screen, slide into place ──
       newPage.style.transition = 'none';
-      newPage.classList.remove('page-transitioning');
+      newPage.classList.remove('page-slide');
+      var newStartX = goingForward ? '70%' : '-70%';
+      newPage.style.transform = 'translateX(' + newStartX + ') scale(1.03)';
       newPage.style.opacity   = '0';
-      newPage.style.transform = 'scale(1.08)';
-      newPage.style.filter    = 'blur(20px)';
+      newPage.style.filter    = 'blur(0px)';
       // Force reflow to register start state
       void newPage.offsetHeight;
 
-      // ── Animate to clear ──
-      newPage.classList.add('page-transitioning');
+      // ── Animate into position ──
+      newPage.classList.add('page-slide');
       newPage.style.transition = '';
-      newPage.style.opacity   = '1';
-      newPage.style.transform = 'scale(1)';
-      newPage.style.filter    = 'blur(0)';
+      newPage.style.transform  = 'translateX(0) scale(1)';
+      newPage.style.opacity    = '1';
+      newPage.style.filter     = 'blur(0px)';
 
-      // ── Clean up after enter ──
       function finishEnter() {
         newPage.style.transition = 'none';
-        newPage.classList.remove('page-transitioning');
+        newPage.classList.remove('page-slide');
         newPage.style.position  = '';
         newPage.style.top       = '';
         newPage.style.left      = '';
@@ -5336,9 +5359,9 @@
         document.body.classList.remove('transitioning');
         isTransitioning = false;
       }
-      setTimeout(finishEnter, 500);
+      setTimeout(finishEnter, 600);
     }
-    setTimeout(finishLeave, 500);
+    setTimeout(finishLeave, 600);
   }
 
   function showBlog() {
@@ -5394,13 +5417,13 @@
     window.scrollTo(0, scrollPos.blog);
   }
 
-  blogLink.addEventListener('click', e => { e.preventDefault(); pageTransition(() => showBlog()); });
-  if (worksLink) worksLink.addEventListener('click', e => { e.preventDefault(); pageTransition(() => showWorks()); });
-  homeLinks[0].addEventListener('click', e => { e.preventDefault(); pageTransition(() => showHome()); });
+  blogLink.addEventListener('click', e => { e.preventDefault(); pageTransition(() => showBlog(), 'page-blog'); });
+  if (worksLink) worksLink.addEventListener('click', e => { e.preventDefault(); pageTransition(() => showWorks(), 'page-works'); });
+  homeLinks[0].addEventListener('click', e => { e.preventDefault(); pageTransition(() => showHome(), 'page-home'); });
 
   // Allow the in-page "首页 Home" link in the works footer to go back to home
   document.querySelectorAll('[data-nav="home"]').forEach(a => {
-    a.addEventListener('click', e => { e.preventDefault(); pageTransition(() => showHome()); });
+    a.addEventListener('click', e => { e.preventDefault(); pageTransition(() => showHome(), 'page-home'); });
   });
 
   // Works — category filter
@@ -5441,7 +5464,7 @@
     if (typeof supabase !== 'undefined' && SUPABASE_URL && SUPABASE_KEY) {
       try {
         supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        // Ping test: check connection
+        // Ping test: check connection, THEN init comments once we know the status
         supabaseClient.from('comments').select('id', { count: 'exact', head: true }).then(function (res) {
           if (!res.error) {
             supabaseStatus = 'on';
@@ -5452,18 +5475,22 @@
             console.error('[auth] ❌ Supabase error:', supabaseErrorMsg);
             console.error('[auth] → 请在 Supabase SQL Editor 中创建 comments 表');
           }
+          initComments();
         }).catch(function (e) {
           supabaseStatus = 'error';
           supabaseErrorMsg = String(e.message || e).slice(0, 80);
           console.error('[auth] ❌ Supabase connection failed:', supabaseErrorMsg);
+          initComments();
         });
       } catch (e) {
         supabaseStatus = 'error';
         supabaseErrorMsg = String(e.message || e).slice(0, 80);
         console.warn('[auth] Supabase init failed:', e);
+        initComments();
       }
-    } else if (!SUPABASE_URL) {
-      console.log('[auth] Supabase not configured — using localStorage only');
+    } else {
+      if (!SUPABASE_URL) console.log('[auth] Supabase not configured — using localStorage only');
+      initComments();
     }
 
     // Simple non-cryptographic "hash" — only obscures the password in storage,
@@ -6103,7 +6130,7 @@
       renderGuestbook();
       window.scrollTo(0, 0);
     }
-    if (guestbookLink) guestbookLink.addEventListener('click', e => { e.preventDefault(); pageTransition(() => showGuestbook()); });
+    if (guestbookLink) guestbookLink.addEventListener('click', e => { e.preventDefault(); pageTransition(() => showGuestbook(), 'page-guestbook'); });
 
     // Seed a few demo messages (only if both cloud and localStorage are empty)
     function seedIfEmpty() {
@@ -6120,8 +6147,8 @@
       renderCommentsFromCache();
     }
 
-    // ── Initialize: start real-time listener, then render ──
-    initComments();
+    // ── Init: Supabase ping runs async, calls initComments() when ready ──
+    // (initComments moved into Supabase ping callbacks above)
     // Seed check after a short delay (wait for Supabase to respond)
     setTimeout(seedIfEmpty, supabaseClient ? 1500 : 0);
     renderAuthPill();
