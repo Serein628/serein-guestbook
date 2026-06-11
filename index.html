@@ -6132,25 +6132,8 @@
     }
     if (guestbookLink) guestbookLink.addEventListener('click', e => { e.preventDefault(); pageTransition(() => showGuestbook(), 'page-guestbook'); });
 
-    // Seed a few demo messages (only if both cloud and localStorage are empty)
-    function seedIfEmpty() {
-      if (localStorage.getItem('mystudio-comments-seeded')) return;
-      if (commentsCache.length > 0) { localStorage.setItem('mystudio-comments-seeded', '1'); return; }
-      var seeds = [
-        { author: 'Serein',  content: '欢迎来留言！这是我的个人博客 + 作品集。任何想法、问题、吐槽都可以在这里写下，我看到会回 ✦', ts: Date.now() - 1000*60*60*26 },
-        { author: 'Lin',     content: "游戏我玩到了三王前就卡关了，攻略太顶了，「战士哥的巅峰」原来是这个意思。", ts: Date.now() - 1000*60*60*8 },
-        { author: '阿月',    content: '电气大一表示同频了，那个摩斯电码工具是不是还没做？想做 :)', ts: Date.now() - 1000*60*45 }
-      ];
-      seeds.forEach(function (s) { s.id = 'seed_' + Math.random().toString(36).slice(2,8); saveComment(s); });
-      localStorage.setItem('mystudio-comments-seeded', '1');
-      commentsCache = loadCommentsLocal();
-      renderCommentsFromCache();
-    }
-
     // ── Init: Supabase ping runs async, calls initComments() when ready ──
     // (initComments moved into Supabase ping callbacks above)
-    // Seed check after a short delay (wait for Supabase to respond)
-    setTimeout(seedIfEmpty, supabaseClient ? 1500 : 0);
     renderAuthPill();
     renderGuestbook();
     } catch (err) {
