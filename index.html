@@ -5464,8 +5464,20 @@
     if (typeof supabase !== 'undefined' && SUPABASE_URL && SUPABASE_KEY) {
       try {
         supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // Safety timeout: if Supabase doesn't respond in 5s, fall back to localStorage
+        var initCalled = false;
+        function initOnce() { if (initCalled) return; initCalled = true; initComments(); }
+        var safetyTimer = setTimeout(function () {
+          if (!initCalled) {
+            supabaseStatus = 'error';
+            supabaseErrorMsg = '连接超时，已切换到本地模式';
+            console.warn('[auth] ⏰ Supabase timeout after 5s — falling back to localStorage');
+            initOnce();
+          }
+        }, 5000);
         // Ping test: check connection, THEN init comments once we know the status
         supabaseClient.from('comments').select('id', { count: 'exact', head: true }).then(function (res) {
+          clearTimeout(safetyTimer);
           if (!res.error) {
             supabaseStatus = 'on';
             console.log('[auth] ✅ Supabase connected — comments synced to cloud');
@@ -5475,12 +5487,13 @@
             console.error('[auth] ❌ Supabase error:', supabaseErrorMsg);
             console.error('[auth] → 请在 Supabase SQL Editor 中创建 comments 表');
           }
-          initComments();
+          initOnce();
         }).catch(function (e) {
+          clearTimeout(safetyTimer);
           supabaseStatus = 'error';
           supabaseErrorMsg = String(e.message || e).slice(0, 80);
           console.error('[auth] ❌ Supabase connection failed:', supabaseErrorMsg);
-          initComments();
+          initOnce();
         });
       } catch (e) {
         supabaseStatus = 'error';
