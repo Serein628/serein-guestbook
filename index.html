@@ -5618,8 +5618,16 @@
       ['#45B7D1', '#79CCDF'],  // sky
       ['#96CEB4', '#B5DDCB'],  // sage
       ['#E88BB5', '#F0ACCA'],  // rose
+      ['#2ECC71', '#58D68D'],  // emerald
+      ['#E74C3C', '#F1948A'],  // red
+      ['#3498DB', '#85C1E9'],  // blue
+      ['#F39C12', '#F8C471'],  // orange
+      ['#9B59B6', '#C39BD3'],  // violet
+      ['#1ABC9C', '#76D7C4'],  // mint
+      ['#D35400', '#E67E22'],  // pumpkin
+      ['#7F8C8D', '#B2BABB'],  // slate
     ];
-    const GUEST_AVATAR_ICONS = ['★', '◇', '♣', '●', '♦', '▲', '☀', '♫'];
+    const GUEST_AVATAR_ICONS = ['★', '◇', '♣', '●', '♦', '▲', '☀', '♫', '♠', '♥', '♢', '☾', '✿', '♬', '✦', '☁'];
 
     function hashStr(s) {
       let h = 0;
@@ -5919,16 +5927,39 @@
     }
 
     // ── Guest login ───────────────────────────────
-    const GUEST_NAMES = ['海风','星尘','月光','晨曦','云朵','松果','珊瑚','流星',
-                         '竹林','雪莲','墨鱼','银杏','浪花','山茶','萤火','贝壳'];
+    const GUEST_NAMES = [
+      '海风','星尘','月光','晨曦','云朵','松果','珊瑚','流星',
+      '竹林','雪莲','墨鱼','银杏','浪花','山茶','萤火','贝壳',
+      '极光','鲸落','潮汐','青鸟','薄雾','晚霞','霜降','清泉',
+      '落英','柳絮','蝶舞','蝉鸣','鹤影','鹿铃','桂香','竹露',
+      '星河','暮云','朝雨','晴雪','烟波','翠微','澄江','碧落',
+      '飞花','归雁','流萤','栖鸦','渡鹤','眠鹭','吟风','踏月',
+      '寻幽','拾光','揽星','逐梦','栖梧','饮露','衔泥','展翅'
+    ];
 
     function guestLogin() {
-      const suffix = GUEST_NAMES[Math.floor(Math.random() * GUEST_NAMES.length)];
-      const name = '游客·' + suffix;
+      const users = loadUsers();
+      const takenNames = new Set(users.map(u => u.username));
+      // Try to pick an unused name first; if all taken, append a random suffix
+      const pool = [...GUEST_NAMES];
+      // Fisher-Yates shuffle for random order without repeats
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      let suffix = pool.find(n => !takenNames.has('游客·' + n));
+      let name;
+      if (suffix) {
+        name = '游客·' + suffix;
+      } else {
+        // All names taken — append random digits
+        const r = Math.floor(Math.random() * 9000) + 1000;
+        suffix = pool[0];
+        name = '游客·' + suffix + r;
+      }
       const avatar = generateGuestAvatar(name);
 
       // Persist guest as a user so avatar stays associated with their comments
-      const users = loadUsers();
       users.push({ username: name, displayName: name, pwHash: '', createdAt: Date.now(), guest: true, avatar: avatar });
       saveUsers(users);
       saveSession(name);
